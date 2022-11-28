@@ -42,56 +42,29 @@ class image_converter:
 
     current_time = time.time()
 
-    if (current_time - start_time > 10):
+    if (current_time - start_time > 8):
       line_to_follow = 1
     
     # convert image to grayscale
     gray_frame = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
 
+    # convert image to hsv image
+    hsv_frame = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+
     # find width and height of image
     height = gray_frame.shape[0]
     width = gray_frame.shape[1]
 
-    # convert image to binary scale
+    # convert grayscale image to binary scale
     (thresh, binary_img) = cv2.threshold(gray_frame, 180, 255, cv2.THRESH_BINARY)
+
+    # convert hsv image to binary scale
+    binary_hsv = cv2.inRange(hsv_frame, (0, 0, 100), (0, 0, 255))
     
     # blur image
-    binary_img = cv2.blur(binary_img,(5,5))
-
-    # crop image to specific location
-    cropped_ahead = binary_img[400:500,:]
-    cropped_nav = binary_img[600:700,:]
-
-    # calculate moments of navigation cropped binary image
-    M_n = cv2.moments(cropped_nav)
-    
-    # calculate x,y coordinate of center
-    if M_n["m00"] != 0:
-      cX_n = int(M_n["m10"] / M_n["m00"]) 
-      cY_n = int(M_n["m01"] / M_n["m00"]) + 600
-    else:
-      cX_n, cY_n = 0, 0
-    
-    # calculate moments of ahead cropped binary image
-    M_a = cv2.moments(cropped_ahead)
-    
-    # calculate x,y coordinate of center
-    if M_a["m00"] != 0:
-      cX_a = int(M_a["m10"] / M_a["m00"])
-      cY_a = int(M_a["m01"] / M_a["m00"]) + 400
-    else:
-      cX_a, cY_a = 0, 0
-
-    # if (cX_a < cX_n) and (cY_a < cX_a):
-    #   line_to_follow = 1
-    
-    # line follows based on the line to follow
+    binary_img = cv2.blur(binary_hsv,(5,5))
 
     row = binary_img[600]
-
-    # Goes through each pixel's gray value in bottom_row and find the column number of the first 
-    # pixel that has a gray value below the threshold.
-    # Note: darker pixels have smaller values than lighter pixels
 
     move = Twist()
     kp = 4
@@ -99,24 +72,29 @@ class image_converter:
     leading_edge = 0
     origin = width/2
     move.linear.x = 0.2
-    threshold = 150
+    threshold = 200
     sum = 0
 
+    # detect the edge of the line on the left side
     if (line_to_follow == 0):
       column = 0
       for pixel in row:
         column += 1
         if (pixel > threshold):
+          # making sure there are at least 5 white pixels in a row and not just random noisy pixels
           sum += 1
         else:
           sum = 0
-        if (sum >= 30):
+        if (sum >= 5):
           leading_edge = column - sum
           break
 
+      # find the center pixel
       center = leading_edge + 400
+      #find how much turning is needed
       move.angular.z = (1-center/origin)*kp
     
+    # detect the edge of the line on the right side
     else:
       for i in range(1, len(row)):
         column = width - i
@@ -124,46 +102,34 @@ class image_converter:
           sum += 1
         else:
           sum = 0
-        if (sum >= 30):
+        if (sum >= 5):
           leading_edge = column + sum
           break
-
+      
+      # find the center pixel
       center = leading_edge - 400 
+      # find how much turning is needed
       move.angular.z = (1-center/origin)*kp 
 
-
-    # else:
-    #   move.linear.x = 0.1
-    #   move.angular.z = 0
-    #   center = int(width/2)
-
-    # put text and highlight the centroid
-
-    cv2.circle(binary_img, (leading_edge, 600), 5, (255, 255, 255), -1)
-    cv2.putText(binary_img, "leading edge", (leading_edge - 25, 600 - 25),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-
-    cv2.circle(binary_img, (cX_n, cY_n), 5, (255, 255, 255), -1)
-    cv2.putText(binary_img, "nav centroid", (cX_n - 25, cY_n - 25),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-    
-    cv2.circle(binary_img, (cX_a, cY_a), 5, (255, 255, 255), -1)
-    cv2.putText(binary_img, "ahead centroid", (cX_a - 25, cY_a - 25),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+    # highlight the center of the road
 
     cv2.circle(binary_img, (center, 600), 5, (255, 255, 255), -1)
     cv2.putText(binary_img, "center", (center - 25, 600 - 25),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+    # write at top left of image which line is being followed
 
     if (line_to_follow == 0):
       cv2.putText(binary_img, "line following: left", (10,10),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
     else:
       cv2.putText(binary_img, "line following: right", (10,10),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-    cv2.imshow('Black white image', binary_img)
+    # display the binary HSV image
+    cv2.imshow('Binary HSV', binary_img)
     cv2.waitKey(3)
- 
-    # cv2.imshow("Image window", cv_image)
-    # cv2.waitKey(3)
 
+    # after 30 seconds have passed, stop timer
     current_time = time.time()
-    if (current_time - start_time) > 5 and (current_time - start_time) < 6:
+    if (current_time - start_time) > 30 and (current_time - start_time) < 31:
       self.plate_pub.publish(finalPlate)
 
     try:
