@@ -57,7 +57,7 @@ class image_converter:
       no_plates, contours = self.twoLargestContours(closed_car_mask_copy)
       if (no_plates == False):
         image_wanted, h, w, rb, rt, lb, lt = self.four_corner_points(rgb_frame, contours)
-        if h > 100 and w > 100:
+        if h > 50 and w > 50:
           cv2.imshow('Wanted', image_wanted)
           cv2.waitKey(1)
 
@@ -138,20 +138,16 @@ class image_converter:
     red_mask = cv2.inRange(hsv_frame, (0, 200, 0), (6, 255, 255))
     red_blurry = cv2.blur(red_mask,(5,5))
 
-    row = red_blurry[600]
+    M = cv2.moments(red_blurry)
+    # try:
+    #   cY = int(M["m01"] / M["m00"])
+    # except ZeroDivisionError:
+    #   cY = 0
+    
+    # current_time = time.time()
 
-    red_width = 0
-
-    current_time = time.time()
-
-    # check if there are more than 200 pixels in a row that are red, if there are, red line is detected
-    for pixel in row:
-      if (pixel > threshold):
-        red_width += 1
-      if (red_width >= 10) and (current_time - self.detected_time) > 5:
-        # change state
-        state = 1 #cross walk state
-        break
+    # if cY > 500:
+    #   state = 1 #crosswalk state
       
     # STATE: CROSSWALK
     if (state == 1):
@@ -163,7 +159,7 @@ class image_converter:
       crosswalk_init_time = time.time()
 
       # try to detect pedestrian
-      pixel_row = binary_img[365][650:670]
+      pixel_row = binary_img[375][650:670]
       for pixel in pixel_row:
         if (pixel > 200):
           self.pedestrian_detected = True
@@ -200,9 +196,9 @@ class image_converter:
     # cv2.imshow('Binary HSV', binary_img)
     # cv2.waitKey(1)
 
-    # # display the car mask
-    # cv2.imshow('Car Mask', car_mask)
-    # cv2.waitKey(1)
+    # display the car mask
+    cv2.imshow('Car Mask', car_mask)
+    cv2.waitKey(1)
 
     # display the normal CV image
     cv2.imshow('CV Image', cv_image)
@@ -222,8 +218,8 @@ class image_converter:
     counter = 0
     foundCar = False
 
-    low_blue = np.array([115, 50, 50])
-    high_blue = np.array([130, 255, 255])
+    low_blue = np.array([119, 50, 50])
+    high_blue = np.array([124, 255, 255])
     blue_mask = cv2.inRange(hsv, low_blue, high_blue) #white pixels in range and black pixels not in range
     blue = cv2.bitwise_and(hsv, hsv, mask=blue_mask) 
 
