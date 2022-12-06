@@ -57,6 +57,10 @@ class image_converter:
 
           sepimage = self.separatingimages(image_wanted)
 
+          transform = self.perspectiveTransform(image_wanted, lt, rb, lb, rt)
+
+          cv2.imshow("transform", transform)
+          cv2.waitKey(1)
 
         
           bool, newcontours = (self.twoLargestContours(sepimage))
@@ -69,8 +73,6 @@ class image_converter:
 
             licenseplateimage, rb_lp, rt_lp, lb_lp, lt_lp = self.four_corner_point_license_plate(image_wanted, newcontours)
 
-            cv2.imshow("Plate Image", licenseplateimage)
-            cv2.waitKey(1)
 
 
     # find width and height of image
@@ -307,6 +309,18 @@ class image_converter:
 
     return new_image, right_bot, right_top, left_bot, left_top
 
+  def perspectiveTransform(self, image, lt, rb, lb, rt):
+    pts1 = np.float32([lt, rb, lb, rt])
+    pts2 = np.float32([[0,0], [180,232], [0,232], [180,0]])
+
+    M = cv2.getPerspectiveTransform(pts1, pts2)
+    dst = cv2.warpPerspective(image, M, (180,232))
+
+    return dst
+    #plt.imshow(dst)
+
+#todo:
+# pers transform-> crop the LP and parking number
 
 def main(args):
   ic = image_converter()
