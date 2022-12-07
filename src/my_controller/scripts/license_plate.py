@@ -21,6 +21,7 @@ class image_converter:
 
     self.car_detected = False
     self.number_of_plates_tracked = 0
+    self.count_parking = 0
 
   def callback(self,data):
     try:
@@ -46,9 +47,14 @@ class image_converter:
       corners, area = self.four_corner_points(new_rgb, largest_contour)
       if (area != 0):
         full, plate = self.perspectiveTransform(rgb_frame, corners)
-        cv2.imshow("transform", full)
+        #count_parking = count_parking+1
+        #parking_number_value = count_parking
+        let1plate, let2plate, let3plate, let4plate = self.hsv_filter_plate(plate)
+        #cv2.imshow("transform", full)
+        #cv2.waitKey(3)
+        #cv2.imshow("plate only", plate)
+        cv2.imshow("let1plate", let1plate)
         cv2.waitKey(3)
-        cv2.imshow("plate only", plate)
 
   def findContour(self, image):
 
@@ -121,7 +127,26 @@ class image_converter:
 
     cv2.imshow("Transformed Full", transformed_with_plate)
 
+    self.count_parking = self.count_parking+1
+    print(self.count_parking) 
+
     return transformed_with_plate, large_plate
+
+  def hsv_filter_plate(self, image): 
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    lower = np.array([117,113,82])
+    upper = np.array([255,255,255])
+    mask = cv2.inRange(hsv_image,lower,upper) 
+
+    first_letter = image[80:250,40:150]
+    second_letter = image[80:250,150:260]
+    third_letter = image[80:250,340:450]
+    fourth_letter = image[80:250,450:560]
+
+    return first_letter, second_letter, third_letter, fourth_letter
+
+    # todo: cropping, counting parking
 
 def main(args):
   ic = image_converter()
