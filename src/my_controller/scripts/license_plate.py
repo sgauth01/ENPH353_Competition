@@ -46,15 +46,21 @@ class image_converter:
       new_rgb = rgb_frame.copy()
       corners, area = self.four_corner_points(new_rgb, largest_contour)
       if (area != 0):
-        full, plate = self.perspectiveTransform(rgb_frame, corners)
+        full, plate = self.perspectiveTransform(cv_image, corners) # previously rgb_frame
         #count_parking = count_parking+1
         #parking_number_value = count_parking
-        let1plate, let2plate, let3plate, let4plate = self.hsv_filter_plate(plate)
+        correct_LP = self.confirm_plate_contours(plate)
+        print(correct_LP)
+        if (correct_LP):
+          let1plate, let2plate, let3plate, let4plate = self.hsv_filter_plate(plate)
         #cv2.imshow("transform", full)
         #cv2.waitKey(3)
         #cv2.imshow("plate only", plate)
-        cv2.imshow("let1plate", let1plate)
-        cv2.waitKey(3)
+          cv2.imshow("let1plate", let1plate)
+          cv2.imshow("let2plate", let2plate)
+          cv2.imshow("let3plate", let3plate)
+          cv2.imshow("let4plate", let4plate)
+          cv2.waitKey(3)
 
   def findContour(self, image):
 
@@ -128,7 +134,7 @@ class image_converter:
     cv2.imshow("Transformed Full", transformed_with_plate)
 
     self.count_parking = self.count_parking+1
-    print(self.count_parking) 
+    #print(self.count_parking) 
 
     return transformed_with_plate, large_plate
 
@@ -139,14 +145,66 @@ class image_converter:
     upper = np.array([255,255,255])
     mask = cv2.inRange(hsv_image,lower,upper) 
 
-    first_letter = image[80:250,40:150]
-    second_letter = image[80:250,150:260]
-    third_letter = image[80:250,340:450]
-    fourth_letter = image[80:250,450:560]
+    first_letter = mask[80:250,40:150]
+    second_letter = mask[80:250,150:260]
+    third_letter = mask[80:250,340:450]
+    fourth_letter = mask[80:250,450:560]
 
     return first_letter, second_letter, third_letter, fourth_letter
 
     # todo: cropping, counting parking
+
+  def confirm_plate_contours(self, plate_image):
+
+    correct_plate = False
+
+    plate_image_rgb = cv2.cvtColor(plate_image, cv2.COLOR_BGR2HSV)
+
+    #WITH BLUE PLATE HSV
+
+    #cv2.imshow("rgbplate", plate_image_rgb)
+
+    #low_blue = np.array([119, 50, 50])
+    #high_blue = np.array([124, 255, 105])
+    #blue_mask = cv2.inRange(plate_image_rgb, low_blue, high_blue) #white pixels in range and black pixels not in range
+    #blue = cv2.bitwise_and(plate_image_rgb, plate_image_rgb, mask=blue_mask) 
+
+    #gray_rgb = cv2.cvtColor(blue, cv2.COLOR_HSV2RGB)
+    #grayscale = cv2.cvtColor(gray_rgb, cv2.COLOR_RGB2GRAY)
+    #_, gray_binary = cv2.threshold(grayscale, 10, 255, cv2.THRESH_BINARY)
+
+    # WITH SARAH MASK
+
+    lower = np.array([117,113,82])
+    upper = np.array([255,255,255])
+    mask = cv2.inRange(plate_image_rgb,lower,upper)
+    mask = np.invert(mask)
+
+    #END OF SARAH MASK
+
+    #cv2.imshow("bluey", blue)
+
+    blurred = cv2.GaussianBlur(mask, (3, 3), 0)
+    cv2.imshow("blurred", blurred)
+  #canny = cv2.Canny(blurred, 120, 255, 1)
+
+
+
+    #cv2.imshow("gray binary", gray_binary)
+
+
+    contours, hierarchy = cv2.findContours(blurred, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    #contours_sorted = sorted(contours, key=cv2.contourArea, reverse=True)
+    withcnts = cv2.drawContours(blurred, contours, 0, (0, 255, 0), 5)
+    cv2.imshow("With Plate Contours", withcnts)
+    print(len(contours))
+
+    if len(contours) >= 4:
+      correct_plate = True
+
+    return correct_plate
+
+
 
 def main(args):
   ic = image_converter()
