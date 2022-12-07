@@ -8,11 +8,11 @@ import numpy as np
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import time
+from tensorflow.keras.models import Sequential, model_from_json
 
 class image_converter:
 
   def __init__(self):
-    self.command_pub = rospy.Publisher("/R1/cmd_vel", Twist, queue_size=1)
 
     self.bridge = CvBridge()
     self.image_sub = rospy.Subscriber("/R1/pi_camera/image_raw", Image, self.callback),
@@ -20,8 +20,34 @@ class image_converter:
     self.plate_pub = rospy.Publisher("/license_plate", String, queue_size=1)
 
     self.car_detected = False
-    self.number_of_plates_tracked = 0
-    self.count_parking = 0
+
+    self.json_file = open('model.json', 'r')
+    self.loaded_model_json = self.json_file.read()
+    self.json_file.close()
+
+    self.loaded_model = model_from_json(self.loaded_model_json)
+    # load weights into new model
+    self.loaded_model.load_weights("model.h5")
+    print("Loaded model from disk")
+
+    self.plate_init_time = 0
+
+    # initialize to regular driving state
+    self.state = 0
+
+    self.first_letter = []
+    self.second_letter = []
+    self.third_letter = []
+    self.fourth_letter = []
+
+    self.first = ''
+    self.second = ''
+    self.third = ''
+    self.fourth = ''
+
+    self.entire_plate = ''
+
+    self.count_parking = 1
 
   def callback(self,data):
     try:
@@ -40,84 +66,162 @@ class image_converter:
 
     rgb_frame_copy = rgb_frame.copy()
 
+    # get the largest contour and area
     largest_contour, area, found_plate = self.findContour(rgb_frame_copy)
 
+    # proceed with next steps if a contour was found and the area of the contour is greater than 10000
     if (found_plate == True) and (area > 10000):
+
       new_rgb = rgb_frame.copy()
-      corners, area = self.four_corner_points(new_rgb, largest_contour)
+
+      # find the corners and area of the largest contour
+      corners, area = self.fourCornerPoints(new_rgb, largest_contour)
+
+      # if the area is not 0 (and there is a contour present), take a perspective transform of the contour
       if (area != 0):
-        full, plate = self.perspectiveTransform(cv_image, corners) # previously rgb_frame
-        #count_parking = count_parking+1
-        #parking_number_value = count_parking
-        correct_LP = self.confirm_plate_contours(plate)
-        print(correct_LP)
-        if (correct_LP):
-          let1plate, let2plate, let3plate, let4plate = self.hsv_filter_plate(plate)
-        #cv2.imshow("transform", full)
-        #cv2.waitKey(3)
-        #cv2.imshow("plate only", plate)
-          cv2.imshow("let1plate", let1plate)
-          cv2.imshow("let2plate", let2plate)
-          cv2.imshow("let3plate", let3plate)
-          cv2.imshow("let4plate", let4plate)
-          cv2.waitKey(3)
+        full, plate = self.perspectiveTransform(cv_image, corners)
+
+        cv2.imshow("plate only", plate)
+        cv2.waitKey(3)
+
+        # check that there are at least 4 letters on plate
+        if (self.confirmPlateContours(plate)):
+          if (self.state == 0):
+            self.plate_init_time = time.time()
+            # change state to plate detecting state if was in driving state before
+            self.state = 1
+
+          first, second, third, fourth = self.hsvFilterPlate(plate)
+
+          if (self.state == 1):
+            self.first_letter.append(self.getPrediction(first))
+            self.second_letter.append(self.getPrediction(second))
+            self.third_letter.append(self.getPrediction(third))
+            self.fourth_letter.append(self.getPrediction(fourth))
+          
+    current_time = time.time()
+    
+    # after two seconds, exit plate detecting state
+    if (current_time - self.plate_init_time > 4) and (self.state == 1):
+
+      # get most frequent letter from the list of letters
+      if (len(self.first_letter) > 0):
+        self.first = self.getMostFrequent(self.first_letter)
+        self.entire_plate += self.first
+        self.second = self.getMostFrequent(self.second_letter)
+        self.entire_plate += self.second
+        self.third = self.getMostFrequent(self.third_letter)
+        self.entire_plate += self.third
+        self.fourth = self.getMostFrequent(self.fourth_letter)
+        self.entire_plate += self.fourth
+        print(self.entire_plate)
+      else:
+        self.first = 0
+        self.second = 0
+        self.third = 0
+        self.fourth = 0
+
+      # reinitialize the list
+      self.first_letter = []
+      self.second_letter = []
+      self.third_letter = []
+      self.fourth_letter = []
+
+      # increment parking plate count
+      self.count_parking += 1
+
+      if (self.count_parking == 7):
+        parking_number = 1
+      else:
+        parking_number = self.count_parking
+
+      # create license plate message
+      message = 'TeamTS,bear,' + str(parking_number) + ',' + self.entire_plate
+      print(message)
+
+      # publish plate to license plate tracking app
+      self.plate_pub.publish(message)
+
+      # reintialize entire plate prediction
+      self.entire_plate = ''
+
+      # go back to driving state
+      self.state = 0
 
   def findContour(self, image):
 
-    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     found_plate = False
 
+    # convert image to hsv scale
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # range of hsv values for the white-grayish colour of the parking number plate
     lower = np.array([0,0,90])
     upper = np.array([0,0,210])
     mask = cv2.inRange(hsv_image,lower,upper)
+
+    # count how many contours were find
     count = np.sum(mask)
-
-    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-    contours_sorted = sorted(contours, key=cv2.contourArea, reverse=True)
-
-    largest_contour = contours_sorted[0]
-
-    # get the area of the contour
-    area = cv2.contourArea(largest_contour)
-
-    contour_color = (0, 255, 0)
-
-    withcont = cv2.drawContours(image, [largest_contour], 0, contour_color, 5)
-    cv2.imshow("With Contours", withcont)
 
     if count > 0:
       found_plate = True
 
+    # find all contours
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # sort by contour by area
+    contours_sorted = sorted(contours, key=cv2.contourArea, reverse=True)
+
+    # get contour with largest area
+    largest_contour = contours_sorted[0]
+
+    # get the area of the largest contour
+    area = cv2.contourArea(largest_contour)
+
+    contour_color = (0, 255, 0)
+
+    # draw contours on image
+    # withcont = cv2.drawContours(image, [largest_contour], 0, contour_color, 5)
+    # cv2.imshow("With Contours", withcont)
+
     return largest_contour, area, found_plate
 
-  def order_points(self, pts):
-    rect = np.zeros((4, 2), dtype=np.float32)
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
+  def orderPoints(self, points):
 
-    diff = np.diff(pts, axis = 1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    return rect
+    rectangle = np.zeros((4, 2), dtype=np.float32)
+    s = points.sum(axis=1)
 
-  def four_corner_points(self, image, contour):
+    rectangle[0] = points[np.argmin(s)]
+    rectangle[2] = points[np.argmax(s)]
 
+    diff = np.diff(points, axis = 1)
+    rectangle[1] = points[np.argmin(diff)]
+    rectangle[3] = points[np.argmax(diff)]
+
+    return rectangle
+
+  def fourCornerPoints(self, image, contour):
+
+    # find the box around the contour
     epsilon = 0.05*cv2.arcLength(contour,True)
     box = cv2.approxPolyDP(contour, epsilon, True)
 
-    # see if there are 4 corners
-    if box.shape[0] != 4:
+    num_corners = box.shape[0]
+
+    # check that the box has 4 corners
+    # if not return no corners, and an area of 0
+    if num_corners != 4:
         return (None, 0)
     
-    # if there are 4 corners then sort them
-    box2 = np.zeros((4,2))
-    for i in range(4):
-        box2[i,:] = box[i,0,:]
-    corners = self.order_points(box2)
+    # get all four corner points
+    rectangle = np.zeros((4,2))
+    for i in range(0, 4):
+        rectangle[i,:] = box[i,0,:]
 
-    # get the are of the contour
+        # order corner points
+    corners = self.orderPoints(rectangle)
+
+    # get contour area
     area = cv2.contourArea(contour)
 
     return corners, area
@@ -126,24 +230,30 @@ class image_converter:
     pts1 = np.float32(np.array(corners))
     pts2 = np.float32(np.array([(0, 0), (300,0), (300, 300), (0,300)]))
 
+    # get perspective transform
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
+
+    # extend frame a little to also get license plate
     transformed_with_plate = cv2.warpPerspective(image, matrix, (300,380))
+
+    # crop to only get the plate
     only_plate = transformed_with_plate[300:380,:]
+
+    # resize plate image
     large_plate = cv2.resize(only_plate, (600, 298), interpolation=cv2.INTER_NEAREST)
-
-    cv2.imshow("Transformed Full", transformed_with_plate)
-
-    self.count_parking = self.count_parking+1
-    #print(self.count_parking) 
 
     return transformed_with_plate, large_plate
 
-  def hsv_filter_plate(self, image): 
+  def hsvFilterPlate(self, image): 
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     lower = np.array([117,113,82])
     upper = np.array([255,255,255])
-    mask = cv2.inRange(hsv_image,lower,upper) 
+    mask = cv2.inRange(hsv_image,lower,upper)
+    mask = np.invert(mask)
+
+    cv2.imshow("processed", mask)
+    cv2.waitKey(3)
 
     first_letter = mask[80:250,40:150]
     second_letter = mask[80:250,150:260]
@@ -151,60 +261,89 @@ class image_converter:
     fourth_letter = mask[80:250,450:560]
 
     return first_letter, second_letter, third_letter, fourth_letter
+  
+  def getPrediction(self, letter):
+    new_y_pred = ""
 
-    # todo: cropping, counting parking
+    # use model to make character prediction based on input image
+    img_aug = np.expand_dims(letter, axis=0)
+    y_predict = self.loaded_model.predict(img_aug)[0]
 
-  def confirm_plate_contours(self, plate_image):
+    # get make value from y_predict and convert it to its associate character
+    predictions = y_predict.tolist()
+    max_value = max(predictions)
+    max_index = predictions.index(max_value)
+    new_y_pred += self.numEncoding(max_index)
+
+    return new_y_pred
+  
+  def getMostFrequent(self, input_list):
+    # finds most frequent element in a list
+    return max(set(input_list), key = input_list.count)
+  
+  def numEncoding(self, number):
+  # matches each number to a letter
+    number_encoding = {
+        0: 'A',
+        1: 'B',
+        2: 'C',
+        3: 'D',
+        4: 'E',
+        5: 'F',
+        6: 'G',
+        7: 'H',
+        8: 'I',
+        9: 'J',
+        10: 'K',
+        11: 'L',
+        12: 'M',
+        13: 'N',
+        14: 'O',
+        15: 'P',
+        16: 'Q',
+        17: 'R',
+        18: 'S',
+        19: 'T',
+        20: 'U',
+        21: 'V',
+        22: 'W',
+        23: 'X',
+        24: 'Y',
+        25: 'Z',
+        26: '0',
+        27: '1',
+        28: '2',
+        29: '3',
+        30: '4',
+        31: '5',
+        32: '6',
+        33: '7',
+        34: '8',
+        35: '9',
+    }
+
+    return number_encoding[number]
+  
+  def confirmPlateContours(self, plate_image):
 
     correct_plate = False
 
     plate_image_rgb = cv2.cvtColor(plate_image, cv2.COLOR_BGR2HSV)
-
-    #WITH BLUE PLATE HSV
-
-    #cv2.imshow("rgbplate", plate_image_rgb)
-
-    #low_blue = np.array([119, 50, 50])
-    #high_blue = np.array([124, 255, 105])
-    #blue_mask = cv2.inRange(plate_image_rgb, low_blue, high_blue) #white pixels in range and black pixels not in range
-    #blue = cv2.bitwise_and(plate_image_rgb, plate_image_rgb, mask=blue_mask) 
-
-    #gray_rgb = cv2.cvtColor(blue, cv2.COLOR_HSV2RGB)
-    #grayscale = cv2.cvtColor(gray_rgb, cv2.COLOR_RGB2GRAY)
-    #_, gray_binary = cv2.threshold(grayscale, 10, 255, cv2.THRESH_BINARY)
-
-    # WITH SARAH MASK
 
     lower = np.array([117,113,82])
     upper = np.array([255,255,255])
     mask = cv2.inRange(plate_image_rgb,lower,upper)
     mask = np.invert(mask)
 
-    #END OF SARAH MASK
-
-    #cv2.imshow("bluey", blue)
-
     blurred = cv2.GaussianBlur(mask, (3, 3), 0)
-    cv2.imshow("blurred", blurred)
-  #canny = cv2.Canny(blurred, 120, 255, 1)
-
-
-
-    #cv2.imshow("gray binary", gray_binary)
-
 
     contours, hierarchy = cv2.findContours(blurred, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    #contours_sorted = sorted(contours, key=cv2.contourArea, reverse=True)
     withcnts = cv2.drawContours(blurred, contours, 0, (0, 255, 0), 5)
-    cv2.imshow("With Plate Contours", withcnts)
-    print(len(contours))
 
     if len(contours) >= 4:
       correct_plate = True
 
     return correct_plate
-
-
 
 def main(args):
   ic = image_converter()
