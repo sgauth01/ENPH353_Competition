@@ -144,7 +144,7 @@ class image_converter:
         self.num_crosswalks_detected += 1
       
       # STOPPING SIMULATION AFTER A FEW SECONDS OF TWO CROSSWALKS BEING DETECTED
-      if (current_time - self.last_crosswalk_time > 10) and (self.num_crosswalks_detected == 3):
+      if (current_time - self.last_crosswalk_time > 12) and (self.num_crosswalks_detected == 3):
         # stop moving
         move.linear.x = 0
         move.angular.z = 0
@@ -161,8 +161,6 @@ class image_converter:
       center = 0
 
       cropped = binary_img[360:380,650:670]
-      cv2.imshow("Cropped", cropped)
-      cv2.waitKey(3)
 
       # try to detect pedestrian
       average_colour = np.mean(cropped)
