@@ -13,7 +13,6 @@ import time
 
 initPlate = 'TeamTS,bear,0,XR58'
 finalPlate = 'TeamTS,bear,-1,XR58'
-start_time = time.time()
 
 class image_converter:
 
@@ -25,6 +24,7 @@ class image_converter:
 
     self.plate_pub = rospy.Publisher("/license_plate", String, queue_size=1)
 
+    self.start_time = time.time()
     self.number_of_plates_tracked = 0
     self.detected_time = 0
     self.pedestrian_detected = False
@@ -34,6 +34,9 @@ class image_converter:
     self.last_crosswalk_time = 0
     self.last_plate_published = False
 
+    # decide which line of the road to follow (0 is left and 1 is right)
+    self.line_to_follow = 0
+
     # self.plate_pub = rospy.Publisher("/license_plate", String, queue_size=1)
 
   def callback(self,data):
@@ -41,9 +44,6 @@ class image_converter:
       cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
     except CvBridgeError as e:
       print(e)
-
-    cv2.imshow("Raw image", cv_image)
-    cv2.waitKey(3)
 
     # convert image to grayscale
     gray_frame = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -67,17 +67,12 @@ class image_converter:
 
       # STATE: DRIVING AROUND OUTER LOOP
 
-      # after number of plates tracked = 1, switch to following right line (from left line)
-      # for now let's just say that when 5 seconds have passed we switch the line
-
-      # decide which line of the road to follow (0 is left and 1 is right)
-      line_to_follow = 0
       self.pedestrian_detected = False
 
       current_time = time.time()
 
-      if (current_time - start_time > 6):
-        line_to_follow = 1
+      if (current_time - self.start_time > 6):
+        self.line_to_follow = 1
 
       row = binary_img[600]
 
@@ -90,7 +85,7 @@ class image_converter:
       sum = 0
 
       # detect the edge of the line on the left side
-      if (line_to_follow == 0):
+      if (self.line_to_follow == 0):
         column = 0
         for pixel in row:
           column += 1
@@ -149,7 +144,7 @@ class image_converter:
         self.num_crosswalks_detected += 1
       
       # STOPPING SIMULATION AFTER A FEW SECONDS OF TWO CROSSWALKS BEING DETECTED
-      if (current_time - self.last_crosswalk_time > 7) and (self.num_crosswalks_detected == 3):
+      if (current_time - self.last_crosswalk_time > 10) and (self.num_crosswalks_detected == 3):
         # stop moving
         move.linear.x = 0
         move.angular.z = 0
@@ -177,7 +172,6 @@ class image_converter:
         print("Pedestrian Detected")
         self.state = 0
         self.num_crosswalks_detected += 1
-        print(self.num_crosswalks_detected)
         self.detected_time = time.time()
       
       current_time = time.time()
@@ -193,22 +187,18 @@ class image_converter:
 
     # write at top left of image which line is being followed
 
-    # if (line_to_follow == 0):
-    #   cv2.putText(cv_image, "line following: left", (10,10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-    # else:
-    #   cv2.putText(cv_image, "line following: right", (10,10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+    if (self.line_to_follow == 0):
+      cv2.putText(cv_image, "line following: left", (10,10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+    else:
+      cv2.putText(cv_image, "line following: right", (10,10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
     
-    # if (state == 0):
-    #   cv2.putText(cv_image, "state: driving", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-    # elif (state == 1):
-    #   cv2.putText(cv_image, "state: crosswalk", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+    if (self.state == 0):
+      cv2.putText(cv_image, "state: driving", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+    elif (self.state == 1):
+      cv2.putText(cv_image, "state: crosswalk", (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
     
-    # if (self.pedestrian_detected):
-    #   cv2.putText(cv_image, "PEDESTRIAN DETECTED!!!!", (10,50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-
-    # # display the binary HSV image
-    # cv2.imshow('Binary HSV', binary_img)
-    # cv2.waitKey(1)
+    if (self.pedestrian_detected):
+      cv2.putText(cv_image, "PEDESTRIAN DETECTED!!!!", (10,50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
     # display the car mask
 
