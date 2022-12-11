@@ -102,6 +102,7 @@ class image_converter:
 
         # find the center pixel
         center = leading_edge + 400
+        
         #find how much turning is needed
         move.angular.z = (1-center/origin)*kp
       
