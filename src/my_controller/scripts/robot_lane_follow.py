@@ -48,17 +48,19 @@ class image_converter:
     # convert image to grayscale
     gray_frame = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
 
-    # convert image to hsv image
-    hsv_frame = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-
     # find width and height of image
     height = gray_frame.shape[0]
     width = gray_frame.shape[1]
 
     move = Twist()
+    
+    # convert image to hsv image
+    hsv_frame = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
 
     # convert hsv image to binary scale
-    binary_hsv = cv2.inRange(hsv_frame, (0, 0, 100), (0, 0, 255))
+    low_white = np.array([0, 0, 100])
+    high_white = np.array([0, 0, 255])
+    binary_hsv = cv2.inRange(hsv_frame, low_white, high_white)
     
     # blur image
     binary_img = cv2.blur(binary_hsv,(5,5))
@@ -123,7 +125,9 @@ class image_converter:
       # TRYING TO DETECT CROSSWALK:
 
       # filter out every colour except red
-      red_mask = cv2.inRange(hsv_frame, (0, 200, 0), (6, 255, 255))
+      low_red = np.array([0, 200, 0])
+      high_red = np.array([6, 255, 255])
+      red_mask = cv2.inRange(hsv_frame, low_red, high_red)
       red_blurry = cv2.blur(red_mask,(5,5))
 
       M = cv2.moments(red_blurry)
