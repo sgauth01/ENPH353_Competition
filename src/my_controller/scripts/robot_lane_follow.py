@@ -99,9 +99,10 @@ class image_converter:
           if (sum >= 5):
             leading_edge = column - sum
             break
-
+            
+        lane_width = 800
         # find the center pixel
-        center = leading_edge + 400
+        center = leading_edge + lane_width/2
         
         #find how much turning is needed
         move.angular.z = (1-center/origin)*kp
