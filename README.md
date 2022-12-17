@@ -9,11 +9,11 @@ Here is our software folder tree structure:
 The requirements our control software is trying to achieve can be broken down into two different categories: the driving requirements and the license plate detection requirements. 
 
 The driving requirements are the following:
-The robot must drive around of the course while avoiding collisions with pedestrians at crosswalks.
-The robot must have at least 2 wheels within the white lines of the road at all times.
-The robot must complete a lap of the outer loop in less than 4 minutes.
+*The robot must drive around of the course while avoiding collisions with pedestrians at crosswalks.
+*The robot must have at least 2 wheels within the white lines of the road at all times.
+*The robot must complete a lap of the outer loop in less than 4 minutes.
 
 The license plate detection requirements are the following:
-The robot must be able to detect every blue parked car along the outer loop.
-The robot must be able to return license plate numbers while tracking the associated parking number of each parked car.
+*The robot must be able to detect every blue parked car along the outer loop.
+*The robot must be able to return license plate numbers while tracking the associated parking number of each parked car.
 
