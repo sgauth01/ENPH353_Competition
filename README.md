@@ -2,7 +2,11 @@
 
 The code contained in this repository was developed by Sarah Gauthier and Sayeh Oloumi Yazdi.
 
-In this project, we developed the control code for a robot navigating in a Gazebo simulated environment. The goal was to implement an autonomous agent capable of driving through the environment while obeying traffic laws and returning license plates of parked cars and associated parking IDs. The only input we receive from the environment is real-time images from the in-simulation camera view from the robot. We have two different ROS nodes that process these images. One of these nodes publishes velocity commands to move the robot around the environment, while the other publishes license plate numbers and locations to a license plate tracker application. These nodes run in parallel to ensure the robot is driving and detecting license plates simultaneously.
+In this project, we developed the control code for a robot navigating in a Gazebo simulated environment. The goal was to implement an autonomous agent capable of driving through the environment while obeying traffic laws and returning license plates of parked cars and associated parking IDs. The competition surface is the following:
+
+<img width="735" alt="image" src="https://user-images.githubusercontent.com/90274880/208264855-23070342-e6bc-456c-9bb1-a8fe748165ba.png">
+
+The only input we receive from the environment is real-time images from the in-simulation camera view from the robot. We have two different ROS nodes that process these images. One of these nodes publishes velocity commands to move the robot around the environment, while the other publishes license plate numbers and locations to a license plate tracker application. These nodes run in parallel to ensure the robot is driving and detecting license plates simultaneously.
 
 Here is our software folder tree structure:
 
